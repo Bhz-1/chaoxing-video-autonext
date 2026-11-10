@@ -177,20 +177,39 @@
     const v = list[i];
     if (!v) return null;
 
-    // 拒绝"已经播完"的视频：重复 play() 会让同一小节里的两个视频来回抢，造成画面抽搐
+    // 拒绝"已经播完"的视频
     if (v.ended) return null;
     if (v.duration && isFinite(v.duration) && v.duration > 0 && v.currentTime >= v.duration - 0.5) return null;
 
-    // 播放互斥：本帧已有别的视频在播，就不要起第二个
+    // 播放互斥：同一帧里已有别的视频在播，就不要起第二个
     if (list.some(x => x !== v && !x.paused && !x.ended)) return null;
 
     ensureCoverage(v);
-    v.dataset.vanPlayed = '1';
+
+    // 关键：不要在调用 play() 之前就打 vanPlayed 标记。
+    // 之前就是先打标记，一旦 play() 被浏览器/播放器拒绝，视频没播起来但标记已置位，
+    // 之后 pausedVideoIndex 会永久跳过它 —— 表现就是"停在某一秒再也动不了"。
+    // 现在改为：先试播，确认真的开始播了才打标记。
+    const markStarted = () => { v.dataset.vanPlayed = '1'; S.lastPlayedAt = Date.now(); };
+
     try {
       if (S.settings.unmute) v.muted = false;
       const p = v.play();
-      if (p && p.catch) p.catch(() => { try { v.muted = true; v.play().catch(() => {}); } catch (_) {} });
-      S.lastPlayedAt = Date.now();
+      if (p && typeof p.then === 'function') {
+        p.then(() => markStarted()).catch(() => {
+          // 有声自动播放被拦截 -> 静音重试
+          try {
+            v.muted = true;
+            const p2 = v.play();
+            if (p2 && typeof p2.then === 'function') p2.then(() => markStarted()).catch(() => {});
+            else markStarted();
+          } catch (_) {}
+        });
+      } else {
+        markStarted();
+      }
+      // play() 是异步的，但同步返回时 paused 通常已变成 false
+      if (!v.paused) markStarted();
       return { ok: true, index: i };
     } catch (_) { return null; }
   };
@@ -518,20 +537,21 @@
           if (!v.paused || v.ended) continue;
           if (!v.duration || !isFinite(v.duration) || v.duration <= 0) continue;
           if (v.currentTime >= v.duration - 0.5) continue;
-          if (v.dataset.vanPlayed === '1' && v.currentTime < 0.5) continue;
           return i;
         }
         return -1;
       }, -1);
 
       // 真正待播的视频（用于"接管新小节"）：排除已播完/已播过的
+      // 注意：这里不再因为 vanPlayed 标记就跳过。
+      // 标记只表示"我们尝试播过"，不代表"已播完"；用它当禁播理由会导致
+      // 视频卡在中间永远不被接手。真正该排除的是"已播完"。
       const pausedVideoIndex = safe(() => {
         for (let i = 0; i < vs.length; i++) {
           const v = vs[i];
           if (!v.paused) continue;
           if (!v.duration || !isFinite(v.duration) || v.duration <= 0) continue;
           if (v.ended || v.currentTime >= v.duration - 0.5) continue;
-          if (v.dataset.vanPlayed === '1') continue;
           return i;
         }
         return -1;
@@ -651,6 +671,27 @@
     if (announcedPlay) return;
     if (videos().length > 0) { announcedPlay = true; announce('videos-present'); }
   }, 800);
+
+  // 帧内自检：视频"停在中间且没有在播"超过 5 秒 -> 通知后台接手。
+  // 这条比 alarms 心跳（30 秒）快得多，是"卡住能立刻恢复"的关键。
+  let stuckSince = 0;
+  setInterval(() => {
+    if (!S.settings.enabled) return;
+    const vs = videos();
+    if (!vs.length) { stuckSince = 0; return; }
+    const anyPlaying = vs.some(v => !v.paused && !v.ended);
+    if (anyPlaying) { stuckSince = 0; return; }
+    const pending = vs.some(v =>
+      v.paused && !v.ended &&
+      v.duration && isFinite(v.duration) && v.duration > 0 &&
+      v.currentTime < v.duration - 0.5);
+    if (!pending) { stuckSince = 0; return; }
+    if (!stuckSince) { stuckSince = Date.now(); return; }
+    if (Date.now() - stuckSince > 5000) {
+      stuckSince = 0;
+      try { chrome.runtime.sendMessage({ type: 'van:stuck', url: location.href }); } catch (_) {}
+    }
+  }, 1500);
 
   log('injected', location.href.slice(0, 100));
 })();

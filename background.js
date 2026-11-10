@@ -266,18 +266,30 @@ async function watchdogTick(tabId) {
   const frames = await snapshot(tabId);
   if (!frames.length) return;
 
-  // 有视频在播 / 有弹窗需要处理 -> 交给正常逻辑（不在这里重复动作）
-  if (frames.some(f => f && (f.playing || f.popupOpen))) return;
+  // 有弹窗 -> 交给正常逻辑处理，这里不抢
+  if (frames.some(f => f && f.popupOpen)) return;
+
+  // 有视频在播 -> 不启动第二个。
+  // 注意：超星会把整节的任务点都预加载成 iframe，所以"有帧在播"不一定是当前要看的那一个；
+  // 但只要真的有东西在播，就说明平台自己在推进，不该插手中断它。
+  if (frames.some(f => f && f.playing)) return;
 
   const totalVideos = frames.reduce((n, f) => n + (f.videoCount || 0), 0);
   if (totalVideos === 0) return;
 
-  // 有"待播"视频 -> 起一个
-  const target = frames.find(f => f && f.pausedVideoIndex >= 0);
-  if (!target) return;
+  // 只在"当前小节尚未完成"时才启动，避免去播预加载的后续任务点
+  const xx = frames.find(f => f.xxTasks);
+  if (xx && xx.xxTasks && xx.xxTasks.videoTotal > 0 && xx.xxTasks.videoDone >= xx.xxTasks.videoTotal) {
+    return;   // 本小节视频都已播完，交给 tick 去切下一节
+  }
 
-  await actOnFrame(tabId, target.frameId, { kind: 'play', index: target.pausedVideoIndex });
-  pushLog({ kind: 'watchdog', label: '自动启动视频', url: target.url });
+  // 挑一个"真正待播"的视频起播（优先没有 vanPlayed 标记的）
+  const playable = frames.filter(f => f && f.pausedVideoIndex >= 0);
+  if (!playable.length) return;
+  const target = playable[0];
+
+  const r = await actOnFrame(tabId, target.frameId, { kind: 'play', index: target.pausedVideoIndex });
+  if (r) pushLog({ kind: 'watchdog', label: '自动启动视频', url: target.url });
 }
 
 chrome.tabs.onUpdated.addListener((tabId, info) => {
@@ -314,6 +326,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'van:manualTick') {
     const id = msg.tabId != null ? msg.tabId : tabId;
     tick(id, 'manual').then(r => sendResponse(r)).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (msg.type === 'van:stuck') {
+    const tabId = sender.tab && sender.tab.id;
+    if (tabId != null) {
+      lastWatch.delete(tabId);           // 绕过频率限制，立刻处理
+      watchdogTick(tabId).catch(() => {});
+    }
+    sendResponse({ ok: true });
     return true;
   }
 

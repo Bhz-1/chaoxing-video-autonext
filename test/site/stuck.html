@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>卡在中间</title>
+<style>body{margin:0;font:12px system-ui;padding:8px}
+video{width:240px;height:135px;background:#000;display:block}</style></head>
+<body>
+<div id="log">准备…</div>
+<script>
+var logEl=document.getElementById('log');
+window.__events=[];
+function say(s){ logEl.textContent += s+'\n'; console.log('[stuck] '+s); }
+function makeClip(sec){return new Promise(function(res){
+  var c=document.createElement('canvas');c.width=240;c.height=135;
+  var ctx=c.getContext('2d');var st=c.captureStream(20);
+  var r=new MediaRecorder(st,{mimeType:'video/webm;codecs=vp8'});var ch=[];
+  r.ondataavailable=function(e){if(e.data.size)ch.push(e.data)};
+  var done=new Promise(function(x){r.onstop=x});r.start();var t0=performance.now();
+  new Promise(function(ok){(function d(){var t=(performance.now()-t0)/1000;
+    ctx.fillStyle='hsl('+((t*90)%360)+',60%,45%)';ctx.fillRect(0,0,240,135);
+    if(t<sec)requestAnimationFrame(d);else ok();})();}).then(function(){
+    r.stop();done.then(function(){res(URL.createObjectURL(new Blob(ch,{type:'video/webm'})))});});
+});}
+makeClip(6).then(function(url){
+  var v=document.createElement('video');
+  v.src=url; v.muted=true; v.playsInline=true;
+  v.addEventListener('playing',function(){window.__events.push('playing');say('开始播放');});
+  v.addEventListener('pause',function(){window.__events.push('pause');say('暂停 @'+v.currentTime.toFixed(1));});
+  v.addEventListener('ended',function(){window.__events.push('ended');say('播完');});
+  document.body.appendChild(v);
+  // 播 1.5 秒后人为暂停，并打上 vanPlayed 标记（复现旧 bug 造成的"卡死"）
+  v.play().then(function(){
+    setTimeout(function(){
+      v.pause();
+      v.dataset.vanPlayed='1';   // 旧版会因此永久跳过它
+      say('已暂停并打上 vanPlayed=1 标记（模拟旧 bug 现场）');
+      window.__ready=true;
+    },1500);
+  });
+});
+</script>
+</body></html>

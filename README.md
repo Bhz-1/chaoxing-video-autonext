@@ -69,6 +69,22 @@ content script 注入**所有 frame**，每帧只做两件事：
 - `playIndex()` 拒绝播放已播完的视频，且本帧已有视频在播时不启动第二个
 - 接管循环一发现「有视频在播」立即停手，同一视频只尝试一次
 
+### vanPlayed 标记不能当"禁播"用
+
+`playIndex()` 曾经在调用 `play()` **之前**就设置 `v.dataset.vanPlayed='1'`。一旦 `play()` 被浏览器或播放器拒绝，视频没播起来但标记已置位，之后选择逻辑就永久跳过它 —— 现象是**视频停在某一秒再也不动**。
+
+修正：
+- 只在确认真的开始播（`play()` resolve 或 `paused===false`）之后才打标记
+- `pausedVideoIndex` / `nextVideoIndex` 不再因 `vanPlayed` 跳过，只排除"已播完"
+
+### 卡住要能快速恢复
+
+- **帧内检测**：视频停在中间且无任何视频在播超过 5 秒 → 上报 `van:stuck`
+- **看门狗**：收到后清掉频率限制立刻处理
+- **兜底心跳**：`chrome.alarms` 每 30 秒扫一次
+
+实测：人为把视频暂停在 1.5s 并打上 `vanPlayed=1`（复现旧 bug 现场），扩展约 6 秒内接手并播完。
+
 ### snapshot 必须逐项容错
 
 `executeScript` 会静默吞掉 content script 的异常。曾出现过某个辅助函数缺失导致 `snapshot()` 整体抛 `ReferenceError`，表现就是「扩展装了但完全不动」。现在每项独立 `try/catch`。
@@ -88,6 +104,7 @@ content script 注入**所有 frame**，每帧只做两件事：
 ```bash
 cd test
 node verify.mjs      # 两个视频依次播完、无抽搐（核心回归）
+node stucktest.mjs   # 视频停在中间（带 vanPlayed 标记）能被接手播完
 node popuptest.mjs   # 「任务点未完成」弹窗：点对「下一节」，不点「去学习」
 node cattest.mjs     # 目录跳过专题标题行，正确进入下一小节
 node assert.mjs      # 多小节顺序推进
