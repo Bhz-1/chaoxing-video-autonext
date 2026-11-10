@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>mock 小节</title>
+<style>
+  body{margin:0;font:13px/1.4 system-ui,"Microsoft YaHei",sans-serif;padding:10px}
+  h2{margin:0 0 8px;font-size:17px}
+  #tabs{display:flex;gap:8px;margin-bottom:10px}
+  #tabs span{padding:6px 14px;border-radius:14px;background:#eef3fa;color:#3b6ea5;cursor:pointer}
+  #tabs span.active{background:#1f6feb;color:#fff}
+  #cond{background:#f5f7fa;padding:6px 10px;border-radius:4px;margin-bottom:8px;color:#666;font-size:12px}
+  #cond b{color:#e67700}
+  #pane{color:#888;padding:20px 0}
+  iframe{width:100%;height:calc(100vh - 200px);border:0}
+  #nav{display:flex;gap:8px;margin-bottom:8px}
+  #nav span{padding:4px 10px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fafafa}
+</style>
+</head>
+<body>
+<h2 id="title"></h2>
+<div id="tabs">
+  <span data-tab="video" class="active">1 视频学习</span>
+  <span data-tab="quiz">2 章节测验</span>
+  <span data-tab="read">3 拓展阅读</span>
+  <span data-tab="view">4 拓展视野</span>
+</div>
+<div id="cond">任务点 <b>完成条件</b>：观看时长需 ≥ 总时长的 90%（未完成任务点前，当前视频不可切换）</div>
+<div id="nav">
+  <span id="prevNextFocusPrev">上一节</span>
+  <span id="prevNextFocusNext">下一节</span>
+</div>
+<div id="pane" style="display:none"></div>
+<iframe id="videoFrame"></iframe>
+<script>
+  var q = new URLSearchParams(location.search);
+  var sec = q.get('sec') || '1.2';
+  var vids = Number(q.get('v') || 2);
+  document.getElementById('title').textContent = '小节 ' + sec;
+
+  var pane = document.getElementById('pane');
+  var frame = document.getElementById('videoFrame');
+  var loaded = false;
+
+  function showTab(name) {
+    document.querySelectorAll('#tabs span').forEach(function (s) {
+      s.classList.toggle('active', s.getAttribute('data-tab') === name);
+    });
+    if (name === 'video') {
+      pane.style.display = 'none';
+      frame.style.display = 'block';
+      if (!loaded) { loaded = true; frame.src = 'video.html?sec=' + sec + '&n=' + vids; }
+    } else {
+      frame.style.display = 'none';
+      pane.style.display = 'block';
+      pane.textContent = (name === 'quiz' ? '章节测验：请完成以下题目…' : '拓展阅读内容…');
+    }
+  }
+
+  document.querySelectorAll('#tabs span').forEach(function (s) {
+    s.addEventListener('click', function () {
+      console.log('[mock] 切换标签 ' + s.getAttribute('data-tab'));
+      showTab(s.getAttribute('data-tab'));
+    });
+  });
+
+  showTab(q.get('tab') ? q.get('tab') : 'video');
+
+  document.getElementById('prevNextFocusNext').addEventListener('click', function () {
+    var arr = Array.from(window.parent.document.querySelectorAll('.posCatalog_select'));
+    for (var i = 0; i < arr.length - 1; i++) {
+      if (arr[i].classList.contains('active')) { arr[i + 1].click(); return; }
+    }
+  });
+  document.getElementById('prevNextFocusPrev').addEventListener('click', function () {
+    var arr = Array.from(window.parent.document.querySelectorAll('.posCatalog_select'));
+    for (var i = 1; i < arr.length; i++) {
+      if (arr[i].classList.contains('active')) { arr[i - 1].click(); return; }
+    }
+  });
+
+  window.__mockSection = { sec: sec, vids: vids, showTab: showTab };
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>两个视频-暂停态</title>
+<style>body{margin:0;font:12px system-ui;padding:8px}
+video{width:240px;height:135px;background:#000;display:block;margin-bottom:6px}</style></head>
+<body>
+<div id="log">准备中…</div>
+<script>
+var logEl = document.getElementById('log');
+window.__plays = [];
+window.__events = [];
+function say(s){ logEl.textContent += s + '\n'; console.log('[two-video] ' + s); }
+
+function makeClip(seconds){
+  return new Promise(function(resolve){
+    var c=document.createElement('canvas'); c.width=240; c.height=135;
+    var ctx=c.getContext('2d'); var stream=c.captureStream(20);
+    var rec=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'});
+    var chunks=[]; rec.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
+    var done=new Promise(function(r){ rec.onstop=r; });
+    rec.start(); var t0=performance.now();
+    new Promise(function(res){ (function draw(){
+      var t=(performance.now()-t0)/1000;
+      ctx.fillStyle='hsl('+((t*100)%360)+',60%,45%)'; ctx.fillRect(0,0,240,135);
+      if(t<seconds) requestAnimationFrame(draw); else res();
+    })(); }).then(function(){ rec.stop(); done.then(function(){ resolve(URL.createObjectURL(new Blob(chunks,{type:'video/webm'}))); }); });
+  });
+}
+
+makeClip(3).then(function(url){
+  for(var i=0;i<2;i++){
+    var v=document.createElement('video');
+    v.src=url; v.muted=true; v.playsInline=true;
+    v.setAttribute('data-idx', String(i));
+    (function(v,i){
+      var orig = v.play.bind(v);
+      window.__plays[i] = 0;
+      v.play = function(){
+        window.__plays[i]++;
+        window.__events.push('play:' + i + ' 第' + window.__plays[i] + '次 @t=' + v.currentTime.toFixed(2));
+        console.log('[two-video] play() 视频' + i + ' 第' + window.__plays[i] + '次');
+        return orig();
+      };
+      v.addEventListener('ending', function(){ say('视频'+i+' 即将结束'); });
+    })(v,i);
+    document.body.appendChild(v);
+  }
+
+  // 把视频0 拖到接近结尾（模拟"刚播完还没来得及标记 ended"）
+  var v0 = document.querySelectorAll('video')[0];
+  v0.currentTime = 2.98;   // duration 约 3.0 -> isDead() 判定为 dead
+  say('已把视频0 定位到 2.98s（接近结尾，暂停中）');
+  say('当前 v0.ended=' + v0.ended + ' paused=' + v0.paused + ' duration=' + v0.duration.toFixed(2));
+});
+</script>
+</body></html>

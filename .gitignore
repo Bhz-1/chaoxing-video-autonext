@@ -1,0 +1,7 @@
+# 测试时产生的 Edge profile / 临时扩展副本
+test/.edge-*/
+test/.ext-*/
+test/site-*/
+node_modules/
+.DS_Store
+Thumbs.db

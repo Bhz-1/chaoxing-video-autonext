@@ -1,0 +1,29 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  body{margin:0;width:300px;font:13px/1.5 system-ui,"Microsoft YaHei",sans-serif;color:#222}
+  header{padding:10px 12px;background:#1f6feb;color:#fff;font-weight:600}
+  .row{padding:9px 12px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .row label{flex:1}
+  input[type=range]{width:90px}
+  .val{color:#666;min-width:46px;text-align:right}
+  footer{padding:8px 12px;color:#777;font-size:11px;max-height:130px;overflow:auto;white-space:pre-wrap}
+  button{padding:4px 8px;border:1px solid #ccc;background:#fafafa;border-radius:4px;cursor:pointer;font-size:12px}
+  button:hover{background:#f0f0f0}
+  .off{opacity:.55}
+</style>
+</head>
+<body>
+<header>视频自动连播</header>
+<div class="row"><label>启用自动连播</label><input type="checkbox" id="enabled" checked></div>
+<div class="row"><label>本页下一个视频 / 任务点</label><input type="checkbox" id="autoNextVideo" checked></div>
+<div class="row"><label>跨小节自动切换</label><input type="checkbox" id="autoNextSection" checked></div>
+<div class="row"><label>切换延迟</label><input type="range" id="delayMs" min="0" max="3000" step="100"><span class="val" id="delayVal"></span></div>
+<div class="row"><label>自动取消静音</label><input type="checkbox" id="unmute"></div>
+<div class="row"><button id="advance">立即跳到下一节</button><span id="state" class="val"></span></div>
+<footer id="log">加载中…</footer>
+<script src="popup.js"></script>
+</body>
+</html>

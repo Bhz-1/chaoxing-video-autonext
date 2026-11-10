@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>mock 视频</title>
+<style>body{margin:0;font:12px system-ui;padding:8px}video{width:280px;height:158px;background:#000;display:block;margin-bottom:6px}
+#log{color:#666;white-space:pre-wrap}</style></head>
+<body>
+<div id="log">准备视频…</div>
+<script>
+  var q = new URLSearchParams(location.search);
+  var n = Number(q.get('n') || 1);
+  var logEl = document.getElementById('log');
+  var logs = [];
+  function say(s) { logs.push(s); logEl.textContent = logs.join('\n'); console.log('[mock-video] ' + s); }
+
+  function makeClip(seconds) {
+    return new Promise(function (resolve) {
+      var c = document.createElement('canvas');
+      c.width = 320; c.height = 180;
+      var ctx = c.getContext('2d');
+      var stream = c.captureStream(20);
+      var rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
+      var chunks = [];
+      rec.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+      var done = new Promise(function (r) { rec.onstop = r; });
+      rec.start();
+      var t0 = performance.now();
+      new Promise(function (res) {
+        function draw() {
+          var t = (performance.now() - t0) / 1000;
+          ctx.fillStyle = 'hsl(' + ((t * 120) % 360) + ',60%,45%)';
+          ctx.fillRect(0, 0, 320, 180);
+          ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif';
+          ctx.fillText('t=' + t.toFixed(2) + 's', 20, 100);
+          if (t < seconds) requestAnimationFrame(draw); else res();
+        }
+        draw();
+      }).then(function () {
+        rec.stop();
+        done.then(function () {
+          resolve(URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })));
+        });
+      });
+    });
+  }
+
+  makeClip(1.5).then(function (url) {
+    for (var i = 0; i < n; i++) {
+      var v = document.createElement('video');
+      v.src = url;
+      v.muted = true;
+      v.playsInline = true;
+      v.dataset.idx = String(i);
+      v.setAttribute('data-idx', String(i));
+      (function (v) {
+        v.addEventListener('playing', function () { say('视频' + v.getAttribute('data-idx') + ' 开始播放'); });
+        v.addEventListener('ended', function () { say('视频' + v.getAttribute('data-idx') + ' 播放结束'); });
+      })(v);
+      document.body.appendChild(v);
+    }
+    say('共 ' + n + ' 个视频');
+    var first = document.querySelector('video');
+    if (first) first.play().catch(function (e) { say('play失败:' + e.name); });
+  });
+</script>
+</body>
+</html>

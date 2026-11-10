@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>两个视频-真实播放</title>
+<style>body{margin:0;font:12px system-ui;padding:8px}
+video{width:240px;height:135px;background:#000;display:block;margin-bottom:6px}</style></head>
+<body>
+<div id="log">准备中…</div>
+<script>
+var logEl = document.getElementById('log');
+window.__plays = [0,0];
+window.__events = [];
+function say(s){ logEl.textContent += s + '\n'; console.log('[two] ' + s); }
+function mark(i, what){
+  window.__events.push(what + ':' + i + '@' + Date.now());
+  console.log('[two] ' + what + ' 视频' + i);
+}
+
+function makeClip(seconds){
+  return new Promise(function(resolve){
+    var c=document.createElement('canvas'); c.width=240; c.height=135;
+    var ctx=c.getContext('2d'); var stream=c.captureStream(20);
+    var rec=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp8'});
+    var chunks=[]; rec.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
+    var done=new Promise(function(r){ rec.onstop=r; });
+    rec.start(); var t0=performance.now();
+    new Promise(function(res){ (function draw(){
+      var t=(performance.now()-t0)/1000;
+      ctx.fillStyle='hsl('+((t*80)%360)+',60%,45%)'; ctx.fillRect(0,0,240,135);
+      ctx.fillStyle='#fff'; ctx.font='16px sans-serif'; ctx.fillText('v t='+t.toFixed(2),10,70);
+      if(t<seconds) requestAnimationFrame(draw); else res();
+    })(); }).then(function(){ rec.stop(); done.then(function(){ resolve(URL.createObjectURL(new Blob(chunks,{type:'video/webm'}))); }); });
+  });
+}
+
+// 关键：把两个 video 先建好并挂到 DOM，再由扩展来启动播放（不自己 play）
+makeClip(3).then(function(url){
+  for(var i=0;i<2;i++){
+    var v=document.createElement('video');
+    v.src=url; v.muted=true; v.playsInline=true;
+    v.setAttribute('data-idx', String(i));
+    (function(v,i){
+      v.addEventListener('playing', function(){ mark(i,'playing'); });
+      v.addEventListener('pause',   function(){ mark(i,'pause'); });
+      v.addEventListener('ended',   function(){ mark(i,'ended'); });
+    })(v,i);
+    document.body.appendChild(v);
+  }
+  say('两个视频已就绪（均暂停，等扩展启动）');
+  window.__ready = true;
+});
+</script>
+</body></html>

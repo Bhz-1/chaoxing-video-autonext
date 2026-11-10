@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>catalog</title>
+<style>
+ body{margin:0;font:13px system-ui}
+ #catalog{width:320px;border-right:1px solid #ddd;min-height:100vh}
+ .firstLayer{padding:10px;background:#eef3fa;font-weight:600;cursor:pointer}
+ .posCatalog_select{padding:8px 16px;cursor:pointer}
+ .posCatalog_active{background:#dbeafe;font-weight:600}
+</style></head><body>
+<div id="catalog">
+  <div class="posCatalog_select firstLayer" id="5">5 专题五</div>
+  <div class="posCatalog_select" id="cur51">5.1 课前学习</div>
+  <div class="posCatalog_select" id="cur52">5.2 课中学习</div>
+  <div class="posCatalog_select posCatalog_active" id="cur53">5.3 课后学习</div>
+  <div class="posCatalog_select firstLayer" id="6">6 专题六</div>
+  <div class="posCatalog_select" id="cur61">6.1 课前学习</div>
+  <div class="posCatalog_select" id="cur62">6.2 课中学习</div>
+</div>
+<div id="log">current:<span id="cur">5.3</span> <span id="events"></span></div>
+<script>
+  var ev = []; window.__events = ev;
+  function rec(s){ ev.push(s); document.getElementById("events").textContent = ev.join(" | "); console.log("[mock-cat] " + s); }
+  document.querySelectorAll(".posCatalog_select").forEach(function (el) {
+    el.addEventListener("click", function () {
+      if (el.classList.contains("firstLayer")) { rec("HEADER_CLICKED_BAD:" + el.id); return; }
+      document.querySelectorAll(".posCatalog_select").forEach(function (x) { x.classList.remove("posCatalog_active"); });
+      el.classList.add("posCatalog_active");
+      document.getElementById("cur").textContent = el.textContent.trim();
+      rec("leaf:" + el.id);
+    });
+  });
+</script></body></html>
