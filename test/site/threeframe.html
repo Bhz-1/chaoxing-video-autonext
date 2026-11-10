@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>三个任务点-各一帧（真实超星结构）</title>
+<style>
+  body{margin:0;font:12px system-ui;padding:8px}
+  .ans-attach-ct{border:1px solid #ddd;margin-bottom:8px;padding:4px}
+  iframe{width:280px;height:158px;border:0;display:block}
+  #log{white-space:pre-wrap;color:#555;font-size:11px}
+</style></head>
+<body>
+<div id="log">准备中…</div>
+<div id="tasks"></div>
+<script>
+window.__events = [];
+function say(s){ console.log('[threeframe] ' + s); }
+
+// 真实超星：knowledge/cards 帧里放 N 个 .ans-attach-ct，每个里面一个 video iframe。
+// 三个 iframe 各自独立，每个只有 1 个 <video>，且都 preload=none 等点击才加载。
+var N = Number(new URLSearchParams(location.search).get('n') || 3);
+var SECONDS = Number(new URLSearchParams(location.search).get('d') || 3);
+var tasks = document.getElementById('tasks');
+
+for (var i = 0; i < N; i++) {
+  var box = document.createElement('div');
+  box.className = 'ans-attach-ct videoContainer';
+  box.setAttribute('data-i', String(i));
+  var f = document.createElement('iframe');
+  // vjspage.html：模拟 video.js，preload=none，必须点 .vjs-big-play-button 才加载
+  f.src = 'vjsframe.html?i=' + i + '&d=' + SECONDS;
+  box.appendChild(f);
+  tasks.appendChild(box);
+}
+
+// 站点会周期性刷新任务点完成状态（这里模拟"提前标记"这个坑）
+setInterval(function () {
+  document.querySelectorAll('.ans-attach-ct').forEach(function (el) {
+    var i = Number(el.getAttribute('data-i'));
+    var f = el.querySelector('iframe');
+    try {
+      var v = f.contentWindow.document.querySelector('video');
+      // 故意提前标完成：只要开始播就标（模拟超星真实行为）
+      if (v && !v.paused && !el.classList.contains('ans-job-finished')) {
+        el.classList.add('ans-job-finished');
+        window.__events.push('early-mark:' + i);
+        say('站点提前标记任务点' + i + '完成（视频还在播）');
+      }
+    } catch (e) {}
+  });
+}, 300);
+
+window.__ready = true;
+</script>
+</body></html>

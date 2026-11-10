@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "视频自动连播 · 自动下一节",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "当前视频播完自动播放本页下一个视频；本页视频全部播完后自动切换到下一小节并开始播放。",
   "permissions": [
     "storage",

@@ -169,6 +169,28 @@
 
   /* ---------------- 视频 ---------------- */
   const videos = () => Array.from(document.querySelectorAll('video')).filter(v => v.isConnected);
+
+  /* 本帧在父页面任务点列表里的序号。
+   *
+   * 为什么需要：超星把每个任务点预加载成独立的 video iframe，每个帧里只有 1 个
+   * <video>，所以帧内的 pausedVideoIndex 永远是 0。后台拿到的是 executeScript
+   * 返回的帧数组，那个顺序不是 DOM 顺序 —— 直接遍历就会从中间的任务点开始播，
+   * 实测真实页面出现了 1→2→0 这种乱序。
+   *
+   * 这里向上找装着本帧的那个 .ans-attach-ct 在列表里的下标，交给后台排序。
+   * 拿不到（跨域、结构不同）就返回 -1，后台会退化成"按帧树顺序"。
+   */
+  const taskOrderIndex = () => {
+    try {
+      const w = window.frameElement;
+      if (!w) return -1;
+      const self = w.closest('.ans-attach-ct');
+      if (!self) return -1;
+      const doc = self.ownerDocument;
+      const list = Array.from(doc.querySelectorAll('.ans-attach-ct'));
+      return list.indexOf(self);
+    } catch (_) { return -1; }
+  };
   const isDead = (v) => !v || v.ended ||
     (v.duration && isFinite(v.duration) && v.duration > 0 && v.currentTime >= v.duration - 0.3 && v.paused);
 
@@ -601,6 +623,7 @@
         url: safe(() => location.href, ''),
         title: safe(() => document.title, ''),
         videoCount: vs.length,
+        taskIndex: safe(() => taskOrderIndex(), -1),
         playing: playingIdx >= 0,
         playingIndex: playingIdx,
         nextVideoIndex,

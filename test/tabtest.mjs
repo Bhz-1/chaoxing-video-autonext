@@ -9,7 +9,7 @@ import path from 'node:path';
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const EXT = path.resolve(here, '..');
-const PROFILE = path.join(here, '.edge-profile-tab2');
+const PROFILE = path.join(here, '.edge-tab-' + Date.now());
 const PORT = 9785, CDP = 9341;
 const ROOT = path.join(here, 'site');
 const BASE = 'http://127.0.0.1:' + PORT;

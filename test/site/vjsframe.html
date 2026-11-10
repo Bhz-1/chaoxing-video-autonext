@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>mock video.js 帧</title>
+<style>body{margin:0;background:#000}video{width:280px;height:158px;display:block}
+.vjs-big-play-button{position:absolute;left:100px;top:56px;width:64px;height:44px;background:rgba(0,0,0,.6);color:#fff;border:0;cursor:pointer;z-index:9}</style></head>
+<body>
+<script>
+var q = new URLSearchParams(location.search);
+var idx = q.get('i') || '0';
+var secs = Number(q.get('d') || 3);
+
+var v = document.createElement('video');
+// 关键：preload=none + 不设 src（模拟 video.js 初始状态 readyState=0, duration=0）
+v.preload = 'none';
+v.muted = true;
+v.playsInline = true;
+v.setAttribute('data-idx', idx);
+document.body.appendChild(v);
+
+var btn = document.createElement('button');
+btn.className = 'vjs-big-play-button';
+btn.type = 'button';
+btn.textContent = '▶';
+document.body.appendChild(btn);
+
+function say(s){ console.log('[vjsframe ' + idx + '] ' + s); window.parent.postMessage({from:'vjsframe',i:idx,what:s},'*'); }
+
+var loaded = false;
+btn.addEventListener('click', function () {
+  if (loaded) { v.play().catch(function(){}); return; }
+  loaded = true;
+  say('btn-clicked');
+  // 点按钮后才真正取流
+  v.addEventListener('loadedmetadata', function () { say('loadedmetadata d=' + v.duration.toFixed(2)); });
+  v.addEventListener('playing', function () { say('playing'); });
+  v.addEventListener('ended', function () { say('ended'); });
+  v.src = 'clip.webm';
+  v.load();
+  v.play().catch(function (e) { say('play失败:' + e.name); });
+});
+window.__v = v;
+</script>
+</body></html>

@@ -69,6 +69,28 @@ content script 注入**所有 frame**，每帧只做两件事：
 - `playIndex()` 拒绝播放已播完的视频，且本帧已有视频在播时不启动第二个
 - 接管循环一发现「有视频在播」立即停手，同一视频只尝试一次
 
+### 任务点顺序不能靠帧数组顺序
+
+超星把一节里的每个任务点都预加载成**独立的 video iframe**，每个帧里只有 1 个 `<video>`。
+
+后果有两层：
+1. 帧内的 `pausedVideoIndex` 恒为 `0`，它只对本帧有意义
+2. `chrome.scripting.executeScript({allFrames:true})` 返回的数组顺序是浏览器内部的帧顺序，**不是页面上任务点的 DOM 顺序**
+
+所以后台「遍历第一个可播的帧」实际上是在**随机挑任务点**。在真实 3 任务点小节上实测，播成了 `1 → 2 → 0`；任务点越多越乱。
+
+修法：内容脚本上报 `taskIndex`（本帧的 `window.frameElement` 所属 `.ans-attach-ct` 在父页面列表里的下标），后台用 `orderByTask()` 按它排序后再决策。
+
+注意要**逐个入口都排**，漏一个就会打回原样。起播入口有四处：
+- `watchdogTick` 挑首个待播视频（绝大多数情况的入口）
+- `tick` 的 B 段「播放下一个视频」
+- `tick` 的 D0 段「补播没播完的视频」
+- `scheduleTakeover` 接管循环
+
+`taskIndex` 拿不到时返回 `-1`，后台退化成按帧树顺序，保证不会比原来更差。
+
+回归用例：`test/threeframe.mjs`（3 个独立 iframe，video.js 式 `preload=none`，站点还会提前打 `ans-job-finished`），断言播放顺序必须是 `0 → 1 → 2`。
+
 ### 以视频元素为准，不信站点的 ans-job-finished
 
 实测发现：站点会在视频**刚开始播**（甚至只看了几十秒）时就把任务点标成 `ans-job-finished`。
@@ -145,6 +167,7 @@ node cattest.mjs     # 目录跳过专题标题行，正确进入下一小节
 node assert.mjs      # 多小节顺序推进
 node covtest.mjs     # 视频播完即切，无 90% 门槛
 node tabtest.mjs     # 落在「章节测验」标签时切回「视频学习」
+node threeframe.mjs   # 真实结构：3 个独立 iframe，必须按 0→1→2 顺序播
 ```
 
 `test/site/` 下是 mock 课程页，结构按真实超星 DOM 复刻。

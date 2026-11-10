@@ -15,7 +15,7 @@ fs.mkdirSync(EXT, { recursive: true });
 for (const f of ['manifest.json', 'background.js', 'content.js', 'popup.html', 'popup.js']) {
   fs.copyFileSync(path.join(SRC_EXT, f), path.join(EXT, f));
 }
-const PROFILE = path.join(here, '.edge-cat');
+const PROFILE = path.join(here, '.edge-cat-' + Date.now());
 const PORT = 9793, CDP = 9349;
 const ROOT = path.join(here, 'site');
 const BASE = 'http://127.0.0.1:' + PORT;

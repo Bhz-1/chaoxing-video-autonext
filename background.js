@@ -8,7 +8,7 @@
  * 避免多帧各点一次造成"连跳两节"，也能处理"目录与视频分处同级 iframe"的结构。
  */
 'use strict';
-const VAN_BUILD = 'b11';
+const VAN_BUILD = 'b12';
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -44,6 +44,21 @@ async function execAllFrames(tabId, fn) {
 }
 
 /* 全帧快照：每帧报告自己的能力和"下一步能做什么" */
+/* 按任务点在页面上的真实顺序给帧排序。
+ *
+ * executeScript(allFrames:true) 的返回顺序是浏览器内部的帧顺序，不是 DOM 顺序；
+ * 而每个视频帧里只有 1 个 <video>，帧内索引恒为 0，所以后台"遍历第一个可播的帧"
+ * 实际上是在随机挑任务点。实测真实 3 任务点小节会播成 1→2→0。
+ * content.js 会上报 taskIndex（该帧 iframe 所属 .ans-attach-ct 在列表里的下标），
+ * 这里按它排；拿不到 taskIndex（-1）的排到最后，保持原有相对顺序。
+ */
+function orderByTask(frames) {
+  return frames
+    .map((f, i) => ({ f, i, k: (f && typeof f.taskIndex === 'number' && f.taskIndex >= 0) ? f.taskIndex : Number.MAX_SAFE_INTEGER }))
+    .sort((a, b) => (a.k - b.k) || (a.i - b.i))
+    .map(x => x.f);
+}
+
 async function snapshot(tabId) {
   return await execAllFrames(tabId, function () {
     const api = window.__VAN;
@@ -104,8 +119,8 @@ async function tick(tabId, reason) {
     return { ok: false, why: 'popup-no-next' };
   }
 
-  // B) 有帧还有没播过的视频 -> 播放它（同一帧内连续播放多个视频）
-  for (const f of frames) {
+  // B) 有帧还有没播过的视频 -> 播放它（按任务点在页面上的真实顺序）
+  for (const f of orderByTask(frames)) {
     if (f.nextVideoIndex >= 0) {
       const r = await actOnFrame(tabId, f.frameId, { kind: 'play', index: f.nextVideoIndex });
       if (r) {
@@ -172,8 +187,8 @@ async function tick(tabId, reason) {
     } else {
     // 有正在播的 -> 等它播完
     if (frames.some(f => f.playing)) return { ok: true, why: 'video-in-progress' };
-    // 全暂停、还有没播完的 -> 启动它
-    for (const f of unfinished) {
+    // 全暂停、还有没播完的 -> 启动它（按任务点顺序，先补前面没播完的）
+    for (const f of orderByTask(unfinished)) {
       if (f.pausedVideoIndex >= 0) {
         const r = await actOnFrame(tabId, f.frameId, { kind: 'play', index: f.pausedVideoIndex });
         if (r) { pushLog({ kind: 'play', label: '未播完的视频', url: f.url }); return { ok: true, why: 'pending-video-play' }; }
@@ -258,8 +273,8 @@ function scheduleTakeover(tabId, tries) {
       return;
     }
 
-    // 每轮最多启动一个，启动成功就停手
-    for (const f of frames) {
+    // 每轮最多启动一个，启动成功就停手（按任务点顺序挑最早的待播任务点）
+    for (const f of orderByTask(frames)) {
       if (!f || f.pausedVideoIndex < 0) continue;
       const key = f.frameId + ':' + f.pausedVideoIndex;
       if (attempted.has(key)) continue;
@@ -308,8 +323,10 @@ async function watchdogTick(tabId) {
     return;   // 本小节视频都已播完，交给 tick 去切下一节
   }
 
-  // 挑一个"真正待播"的视频起播（优先没有 vanPlayed 标记的）
-  const playable = frames.filter(f => f && f.pausedVideoIndex >= 0);
+  // 挑一个"真正待播"的视频起播，必须按任务点在页面上的真实顺序取最早的那个。
+  // 这里是绝大多数情况的起播入口（进入小节后第一个视频就靠它），
+  // 如果按 executeScript 的帧顺序挑，会从中间的任务点开始播（实测 1→2→0）。
+  const playable = orderByTask(frames.filter(f => f && f.pausedVideoIndex >= 0));
   if (!playable.length) return;
   const target = playable[0];
 
