@@ -69,6 +69,26 @@ content script 注入**所有 frame**，每帧只做两件事：
 - `playIndex()` 拒绝播放已播完的视频，且本帧已有视频在播时不启动第二个
 - 接管循环一发现「有视频在播」立即停手，同一视频只尝试一次
 
+### video.js 播放器必须先点播放按钮
+
+超星的视频用 video.js：`<video>` 上有 `src`，但 `preload="none"` 且 `readyState=0`，
+**不点击那个大播放按钮（`.vjs-big-play-button`）就不会去拉流**。
+此时只调 `video.play()` 完全无效，视频永远停在 0 秒。
+
+同时在 `pausedVideoIndex` 里不能用 `if (!v.duration) continue` 排除未加载视频
+（duration=0 正是"待启动"的正常状态），否则会与任务点闸门形成死锁：
+「有视频未完成 → 不能切小节」+「没有可播视频 → 永远等」= 卡死。
+
+修法：
+- `playIndex()` 遇到 `readyState === 0` 先 `clickVideoJsPlay(v)` 点播放按钮
+- `pausedVideoIndex` / `nextVideoIndex` 允许 duration 未知的视频，只排除"已播完"（`ended`）
+
+对照实验（同一页面同一视频）：
+| 条件 | 结果 |
+|---|---|
+| 禁用扩展 | readyState=0 持续 25 秒，`btn-clicked` 从未出现 |
+| 启用扩展 | `btn-clicked` → `loadedmetadata` → `playing` → `ended`，4.9 秒播完 |
+
 ### vanPlayed 标记不能当"禁播"用
 
 `playIndex()` 曾经在调用 `play()` **之前**就设置 `v.dataset.vanPlayed='1'`。一旦 `play()` 被浏览器或播放器拒绝，视频没播起来但标记已置位，之后选择逻辑就永久跳过它 —— 现象是**视频停在某一秒再也不动**。
@@ -105,6 +125,8 @@ content script 注入**所有 frame**，每帧只做两件事：
 cd test
 node verify.mjs      # 两个视频依次播完、无抽搐（核心回归）
 node stucktest.mjs   # 视频停在中间（带 vanPlayed 标记）能被接手播完
+node vjstest.mjs     # video.js 必须先点播放按钮才加载的场景
+node vjsctrl.mjs     # 上一条的对照组：不装扩展则永远不加载
 node popuptest.mjs   # 「任务点未完成」弹窗：点对「下一节」，不点「去学习」
 node cattest.mjs     # 目录跳过专题标题行，正确进入下一小节
 node assert.mjs      # 多小节顺序推进

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>video.js 模拟</title>
+<style>body{margin:0;font:12px system-ui;padding:8px}
+.box{position:relative;width:320px;height:180px;background:#111}
+video{width:100%;height:100%}
+.bigbtn{position:absolute;inset:0;margin:auto;width:64px;height:64px;border-radius:50%;
+ background:rgba(255,255,255,.85);border:0;cursor:pointer;font-size:11px}
+.bigbtn.hidden{display:none}</style></head>
+<body>
+<div class="video-js vjs-default-skin" id="wrap">
+  <video id="v" preload="none" playsinline></video>
+  <button class="vjs-big-play-button bigbtn" id="btn">播放视频</button>
+</div>
+<div id="log">未加载</div>
+<script>
+var logEl=document.getElementById('log');
+window.__events=[];
+function say(s){ logEl.textContent=s; window.__events.push(s); console.log('[vjs] '+s); }
+var v=document.getElementById('v');
+var btn=document.getElementById('btn');
+// 真实 HTTP 源 + preload=none：不点按钮就不会加载（readyState 保持 0）
+v.src='clip.webm';
+v.preload='none';
+say('已设置 src，readyState='+v.readyState+' duration='+(v.duration||0));
+v.addEventListener('loadedmetadata',function(){window.__events.push('loadedmetadata');say('加载完成 duration='+v.duration.toFixed(2));});
+v.addEventListener('playing',function(){window.__events.push('playing');say('开始播放');});
+v.addEventListener('ended',function(){window.__events.push('ended');say('播完');});
+btn.addEventListener('click',function(){
+  btn.classList.add('hidden');
+  window.__events.push('btn-clicked');
+  say('点按钮 -> load()+play()');
+  v.load();
+  v.play().catch(function(e){say('play失败:'+e.name);});
+});
+window.__ready=true;
+</script>
+</body></html>

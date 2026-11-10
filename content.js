@@ -172,6 +172,26 @@
   const isDead = (v) => !v || v.ended ||
     (v.duration && isFinite(v.duration) && v.duration > 0 && v.currentTime >= v.duration - 0.3 && v.paused);
 
+  /* 超星用 video.js 播放器：<video> 有 src 但 readyState=0（没加载），
+   * 必须先点那个大播放按钮（.vjs-big-play-button），播放器才会去拉流。
+   * 只调 video.play() 在未加载时是无效的，视频会永远停在 0 秒。
+   */
+  const clickVideoJsPlay = (v) => {
+    try {
+      const box = v.closest('.video-js, .vjs-tech') ? (v.closest('.video-js') || v.parentElement) : v.parentElement;
+      if (!box) return false;
+      const btn = box.querySelector('.vjs-big-play-button, button.vjs-big-play-button');
+      if (btn) {
+        const r = btn.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) { btn.click(); return true; }
+      }
+      // 有些皮肤把按钮做成覆盖层
+      const overlay = box.querySelector('.vjs-poster, .vjs-big-play-centered');
+      if (overlay) { overlay.click(); return true; }
+    } catch (_) {}
+    return false;
+  };
+
   const playIndex = (i) => {
     const list = videos();
     const v = list[i];
@@ -191,6 +211,9 @@
     // 之后 pausedVideoIndex 会永久跳过它 —— 表现就是"停在某一秒再也动不了"。
     // 现在改为：先试播，确认真的开始播了才打标记。
     const markStarted = () => { v.dataset.vanPlayed = '1'; S.lastPlayedAt = Date.now(); };
+
+    // 还没加载（readyState 0）时，先点 video.js 的播放按钮让它开始拉流
+    if (v.readyState === 0) clickVideoJsPlay(v);
 
     try {
       if (S.settings.unmute) v.muted = false;
@@ -535,8 +558,8 @@
         for (let i = 0; i < vs.length; i++) {
           const v = vs[i];
           if (!v.paused || v.ended) continue;
-          if (!v.duration || !isFinite(v.duration) || v.duration <= 0) continue;
-          if (v.currentTime >= v.duration - 0.5) continue;
+          const dur = v.duration;
+          if (dur && isFinite(dur) && dur > 0 && v.currentTime >= dur - 0.5) continue;
           return i;
         }
         return -1;
@@ -546,12 +569,16 @@
       // 注意：这里不再因为 vanPlayed 标记就跳过。
       // 标记只表示"我们尝试播过"，不代表"已播完"；用它当禁播理由会导致
       // 视频卡在中间永远不被接手。真正该排除的是"已播完"。
+      // 注意：duration=0（未加载）也要报出来。
+      // 之前用 `if (!v.duration) continue` 会把"还没加载的视频"永久排除，
+      // 而超星的 video.js 恰恰要等点击播放按钮才加载 -> 死锁（有任务点未完成但永远没有可播视频）。
       const pausedVideoIndex = safe(() => {
         for (let i = 0; i < vs.length; i++) {
           const v = vs[i];
           if (!v.paused) continue;
-          if (!v.duration || !isFinite(v.duration) || v.duration <= 0) continue;
-          if (v.ended || v.currentTime >= v.duration - 0.5) continue;
+          if (v.ended) continue;
+          const dur = v.duration;
+          if (dur && isFinite(dur) && dur > 0 && v.currentTime >= dur - 0.5) continue;  // 已播完
           return i;
         }
         return -1;
