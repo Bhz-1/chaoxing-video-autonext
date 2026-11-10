@@ -151,24 +151,47 @@ async function tick(tabId, reason) {
     // C4) 只有测验/阅读标签的纯图文小节 -> 允许继续走"下一节"
   }
 
-  // D0) 超星任务点闸门
-  //     规则：只保证"视频都播完"。非视频任务点（测验/阅读/讨论）不拦。
+  // D0) 视频完成度闸门
+  //     权威判据是 <video> 元素自身状态，不是站点的 ans-job-finished：
+  //     站点会在视频刚开播/看了一部分时就把任务点标成完成，
+  //     只看它会导致"视频还在播就去切小节"，把正在播的视频打断。
   const xxFrame = frames.find(f => f.xxTasks);
+  const videoFrames = frames.filter(f => f && f.videoCount > 0);
+
+  // 还有视频没播完？(currentTime < duration)
+  const unfinished = videoFrames.filter(f => f.playing || f.pausedVideoIndex >= 0);
+
+  if (unfinished.length) {
+    // 超时保护：连续 10 分钟都停在这里（例如某个视频帧加载失败），
+    // 就放弃等待继续往下走，避免整门课永久卡死。
+    const now0 = Date.now();
+    if (!videoStallSince.has(tabId)) videoStallSince.set(tabId, now0);
+    if (now0 - videoStallSince.get(tabId) > 10 * 60 * 1000) {
+      pushLog({ kind: 'timeout', label: '视频长时间未完成，跳过' });
+      videoStallSince.delete(tabId);
+    } else {
+    // 有正在播的 -> 等它播完
+    if (frames.some(f => f.playing)) return { ok: true, why: 'video-in-progress' };
+    // 全暂停、还有没播完的 -> 启动它
+    for (const f of unfinished) {
+      if (f.pausedVideoIndex >= 0) {
+        const r = await actOnFrame(tabId, f.frameId, { kind: 'play', index: f.pausedVideoIndex });
+        if (r) { pushLog({ kind: 'play', label: '未播完的视频', url: f.url }); return { ok: true, why: 'pending-video-play' }; }
+      }
+    }
+    scheduleTakeover(tabId, 12);
+    return { ok: false, why: 'pending-video' };
+    }
+  } else {
+    videoStallSince.delete(tabId);
+  }
+
+  // 视频都播完了。站点若还认为有未完成任务点，交给它自己的弹窗/下一节处理。
   if (xxFrame) {
     const t = xxFrame.xxTasks;
-    const needVideo = t.videoTotal > 0 && t.videoDone < t.videoTotal;
-    if (needVideo) {
-      // 还有视频没完成：先把暂停的视频拉起来
-      for (const f of frames) {
-        if (f.nextVideoIndex >= 0) {
-          const r = await actOnFrame(tabId, f.frameId, { kind: 'play', index: f.nextVideoIndex });
-          if (r) { pushLog({ kind: 'play', label: '未完成视频任务点', url: f.url }); return { ok: true, why: 'pending-video-play' }; }
-        }
-      }
-      scheduleTakeover(tabId, 12);
-      return { ok: false, why: 'pending-video-task' };
+    if (t.videoTotal > 0 && t.videoDone < t.videoTotal) {
+      pushLog({ kind: 'note', label: '视频已播完但站点未标记完成，继续' });
     }
-    // 视频都完成了（或本节没有视频任务点）-> 允许继续往下走，去下一节
   }
 
   // D) 有帧能点"下一任务点" -> 点它
@@ -202,6 +225,8 @@ async function tick(tabId, reason) {
   pushLog({ kind: 'idle' });
   return { ok: false, why: 'nothing-to-do' };
 }
+
+const videoStallSince = new Map();   // tabId -> 首次发现"未播完"的时间
 
 const sectionCooldown = new Map();
 const takeoverTimers = new Map();

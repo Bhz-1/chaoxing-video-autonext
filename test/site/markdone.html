@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>站点标记已完成但视频在播</title>
+<style>body{margin:0;font:12px system-ui;padding:8px}
+video{width:240px;height:135px;background:#000;display:block;margin-bottom:6px}
+#catalog b{padding:3px 8px;border:1px solid #ccc;margin-right:5px;cursor:pointer;display:inline-block}
+#catalog b.active{background:#dbeafe;border-color:#1f6feb;font-weight:600}
+.task{padding:6px;border:1px solid #eee;margin:4px 0}
+.finished{background:#e8f5e9}</style></head>
+<body>
+<div id="catalog">
+  <b class="posCatalog_select active" id="cur1">1.1 小节一</b>
+  <b class="posCatalog_select" id="cur2">2.1 小节二</b>
+</div>
+<div id="stage">
+  <!-- 复刻超星任务点结构：站点标记已完成 -->
+  <div class="ans-attach-ct videoContainer ans-job-finished task" id="t0">
+    <video id="v0" preload="auto" muted playsinline></video>
+  </div>
+</div>
+<div id="log">准备…</div>
+<script>
+var logEl=document.getElementById('log');
+window.__events=[];
+function say(s){ logEl.textContent=s; window.__events.push(s); console.log('[md] '+s); }
+var v=document.getElementById('v0');
+v.src='clip.webm';
+v.addEventListener('playing',function(){window.__events.push('playing');say('开始播放');});
+v.addEventListener('ended',function(){window.__events.push('ended');say('播完');});
+v.addEventListener('loadedmetadata',function(){window.__events.push('loadedmetadata');say('时长='+v.duration.toFixed(2));});
+document.querySelectorAll('#catalog b').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('#catalog b').forEach(function(x){x.classList.remove('active');});
+    b.classList.add('active');
+    window.__events.push('section:'+b.id); say('切到 '+b.textContent);
+  });
+});
+// 关键：任务点一开始就是 ans-job-finished（站点过早标记）
+// 同时视频开始播放 —— 扩展必须等它真播完，不能因为站点标记就去切小节
+v.play().then(function(){ say('视频播放中（任务点已被站点标记为完成）'); window.__ready=true; })
+ .catch(function(e){ say('play失败:'+e.name); window.__ready=true; });
+</script>
+</body></html>

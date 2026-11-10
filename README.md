@@ -69,6 +69,18 @@ content script 注入**所有 frame**，每帧只做两件事：
 - `playIndex()` 拒绝播放已播完的视频，且本帧已有视频在播时不启动第二个
 - 接管循环一发现「有视频在播」立即停手，同一视频只尝试一次
 
+### 以视频元素为准，不信站点的 ans-job-finished
+
+实测发现：站点会在视频**刚开始播**（甚至只看了几十秒）时就把任务点标成 `ans-job-finished`。
+如果拿这个当"播完了"的判据，扩展就会在视频还在播的时候去切小节，把视频打断。
+
+现在闸门判据是 `<video>` 自身状态：
+- 有 `playing` 的帧 → 等它播完
+- 全暂停但还有 `currentTime < duration` 的 → 启动它
+- 全部 `ended` 才算真播完，才允许切小节
+
+站点标记只用于日志参考。另加 10 分钟超时保护：某个视频帧真的加载失败时不会永久卡死。
+
 ### video.js 播放器必须先点播放按钮
 
 超星的视频用 video.js：`<video>` 上有 `src`，但 `preload="none"` 且 `readyState=0`，
@@ -127,6 +139,7 @@ node verify.mjs      # 两个视频依次播完、无抽搐（核心回归）
 node stucktest.mjs   # 视频停在中间（带 vanPlayed 标记）能被接手播完
 node vjstest.mjs     # video.js 必须先点播放按钮才加载的场景
 node vjsctrl.mjs     # 上一条的对照组：不装扩展则永远不加载
+node markdone.mjs    # 站点提前标记完成时，仍等视频真播完才切小节
 node popuptest.mjs   # 「任务点未完成」弹窗：点对「下一节」，不点「去学习」
 node cattest.mjs     # 目录跳过专题标题行，正确进入下一小节
 node assert.mjs      # 多小节顺序推进
